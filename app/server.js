@@ -1,19 +1,21 @@
-// References.
-var http = require('http'),
-    lightnode = require('lightnode'),
-    fs = require('fs'),
-		c = require('../config');
+const http = require('http');
+const fs = require('fs');
+const lightnode = require('lightnode');
+const { Server } = require('socket.io');
+const c = require('../config');
+const sys = require('sys');
+const exec = require('child_process').exec;
 
-var sys = require('sys');
-var exec = require('child_process').exec;
-
+const PORT = 8080;
+const SOCKET_PORT = 3000;
 
 // Create server.
-var server = new http.Server();
-server.listen(c.config.portNumber);
-console.log(c.config.staticContentPath)
+const server = new http.Server();
+server.listen(PORT);
+const io = new Server(SOCKET_PORT);
+
 // Website static server.
-var website = new lightnode.FileServer(c.config.staticContentPath);
+const website = new lightnode.FileServer(__dirname + '/public');
 
 // Request.
 website.delegateRequest = function(req, resp) {
@@ -25,15 +27,9 @@ server.addListener('request', function(req, resp) {
 	website.receiveRequest(req, resp);
 });
 
-// Sockets listerner.
-var io = require('socket.io').listen(server);
-
 io.sockets.on('connection', function (socket) {
-	
 	socket.on('console', function(command, callBack){
-	
-		//console.log(command)
-	
+
 		function puts(error, stdout, stderr) {
 		
 			if(error){
@@ -50,5 +46,3 @@ io.sockets.on('connection', function (socket) {
 		exec(command, puts);
 	});
 });
-
-console.log('running on port: ' + c.config.portNumber + '');
