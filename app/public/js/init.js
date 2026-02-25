@@ -1,77 +1,75 @@
 (function () {
-	window.APP = {};
-	APP.socket = io.connect();
-	var socket = APP.socket;
+  var content = document.getElementById('content');
+  var commandLine = document.querySelector('.command-line');
+  var currentLine = '';
 
-	// Key strokes.
-	var codes = {
-		"65": "a",
-		"66": "b",
-		"67": "c",
-		"68": "d",
-		"69": "e",
-		"70": "f",
-		"71": "g",
-		"72": "h",
-		"73": "i",
-		"74": "j",
-		"75": "k",
-		"76": "l",
-		"77": "m",
-		"78": "n",
-		"79": "o",
-		"80": "p",
-		"81": "q",
-		"82": "r",
-		"83": "s",
-		"84": "t",
-		"85": "u",
-		"86": "v",
-		"87": "w",
-		"88": "x",
-		"89": "y",
-		"90": "z",
-		"32": " ",
-		"109": "-",
-		"191": "/",
-		"190": "."
-	};
+  function renderCurrentLine() {
+    commandLine.textContent = currentLine;
+  }
 
-	console.log(codes['89'])
-	var content = $('#content');
+  function appendOutput(text) {
+    var outputLine = document.createElement('div');
+    outputLine.textContent = text;
+    content.appendChild(outputLine);
+  }
 
-	var currentLine = '';
+  function appendPrompt() {
+    var prompt = document.createElement('div');
+    prompt.innerHTML = '$ <span class="command-line"></span>';
+    content.appendChild(prompt);
+    commandLine = prompt.querySelector('.command-line');
+    renderCurrentLine();
+  }
 
-	$(document).keydown(function (e) {
-		var letter = codes[e.keyCode + ''];
+  async function executeCommand(command) {
+    try {
+      var response = await fetch('/api/console', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ command: command })
+      });
 
-		// Handle 'enter'.
-		if (e.keyCode === 13) {
-			console.log('sending console');
+      var data = await response.json();
+      var output = typeof data.output === 'string' ? data.output : (data.error || 'No output');
+      var lines = output.replace(/\r/g, '').split('\n').filter(Boolean);
 
-			// Send...
-			APP.socket.emit('console', currentLine, function (output) {
+      if (lines.length === 0) {
+        appendOutput('');
+      } else {
+        lines.forEach(function (line) {
+          appendOutput(line);
+        });
+      }
+    } catch (error) {
+      appendOutput('Request failed: ' + error.message);
+    }
+  }
 
-				// Teplace new lines with break line.
-				output = output.replace(/\n/g, '<br />');
-				console.log(output);
-				content.append(output + '<br />');
-			});
+  document.addEventListener('keydown', async function (event) {
+    if (event.key === 'Enter') {
+      var command = currentLine;
+      currentLine = '';
+      renderCurrentLine();
 
-			// Reset line cashe
-			currentLine = '';
+      await executeCommand(command);
+      appendPrompt();
+      return;
+    }
 
-			content.append('<br />');
-		} else if (e.keyCode === 8) {
-			currentLine = currentLine.slice(0, -1);
-			content.html(currentLine);
-		} else {
-			if (letter) {
-				currentLine = currentLine + letter;
-				content.html(currentLine);
-			} else {
-				console.log(e.keyCode)
-			}
-		}
-	});
+    if (event.key === 'Backspace') {
+      event.preventDefault();
+      currentLine = currentLine.slice(0, -1);
+      renderCurrentLine();
+      return;
+    }
+
+    if (event.key.length === 1) {
+      currentLine += event.key;
+      renderCurrentLine();
+    }
+  });
+
+  renderCurrentLine();
 }());
