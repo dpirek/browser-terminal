@@ -1,10 +1,12 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
-const { exec } = require('child_process');
+const { spawn } = require('child_process');
 
 const PORT = 8080;
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const COMMAND_TIMEOUT_MS = 5000;
+const MAX_OUTPUT_BYTES = 1024 * 1024;
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -75,15 +77,77 @@ function handleConsoleRequest(req, res) {
       return;
     }
 
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        sendJson(res, 200, {
-          output: `${stdout || ''}${stderr || ''}${error.message}`
-        });
+    const child = spawn(command, { shell: true });
+    let stdout = '';
+    let stderr = '';
+    let outputBytes = 0;
+    let timedOut = false;
+    let responseSent = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+      setTimeout(() => {
+        if (!child.killed) {
+          child.kill('SIGKILL');
+        }
+      }, 200);
+    }, COMMAND_TIMEOUT_MS);
+
+    function appendChunk(target, chunk) {
+      if (outputBytes >= MAX_OUTPUT_BYTES) {
+        return target;
+      }
+
+      const text = chunk.toString();
+      const nextBytes = Buffer.byteLength(text);
+      outputBytes += nextBytes;
+
+      if (outputBytes > MAX_OUTPUT_BYTES) {
+        const allowed = nextBytes - (outputBytes - MAX_OUTPUT_BYTES);
+        return `${target}${text.slice(0, Math.max(0, allowed))}`;
+      }
+
+      return `${target}${text}`;
+    }
+
+    function sendResponse(code, signal) {
+      if (responseSent) {
         return;
       }
 
-      sendJson(res, 200, { output: `${stdout || ''}${stderr || ''}` });
+      responseSent = true;
+      clearTimeout(timer);
+
+      let output = `${stdout}${stderr}`;
+      if (timedOut) {
+        output += `\n[Process stopped after ${COMMAND_TIMEOUT_MS / 1000}s timeout]`;
+      } else if (code !== 0) {
+        output += `\n[Process exited with code ${code}${signal ? `, signal ${signal}` : ''}]`;
+      }
+
+      sendJson(res, 200, { output });
+    }
+
+    child.stdout.on('data', (chunk) => {
+      stdout = appendChunk(stdout, chunk);
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr = appendChunk(stderr, chunk);
+    });
+
+    child.on('error', (error) => {
+      if (responseSent) {
+        return;
+      }
+      responseSent = true;
+      clearTimeout(timer);
+      sendJson(res, 200, { output: `Failed to run command: ${error.message}` });
+    });
+
+    child.on('close', (code, signal) => {
+      sendResponse(code, signal);
     });
   });
 }
