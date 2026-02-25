@@ -1,5 +1,6 @@
 const content = document.getElementById('content');
 let commandLine = document.querySelector('.command-line');
+let cursor = document.querySelector('.cursor');
 let currentLine = '';
 
 function renderCurrentLine() {
@@ -14,10 +15,19 @@ function appendOutput(text) {
 
 function appendPrompt() {
   const prompt = document.createElement('div');
-  prompt.innerHTML = '$ <span class="command-line"></span>';
+  prompt.innerHTML = '$ <span class="command-line"></span><span class="cursor" aria-hidden="true">_</span>';
   content.appendChild(prompt);
   commandLine = prompt.querySelector('.command-line');
+  cursor = prompt.querySelector('.cursor');
   renderCurrentLine();
+}
+
+function deactivateCursor() {
+  if (!cursor) {
+    return;
+  }
+  cursor.remove();
+  cursor = null;
 }
 
 async function executeCommand(command) {
@@ -50,8 +60,8 @@ async function executeCommand(command) {
 document.addEventListener('keydown', async (event) => {
   if (event.key === 'Enter') {
     const command = currentLine;
+    deactivateCursor();
     currentLine = '';
-    renderCurrentLine();
 
     await executeCommand(command);
     appendPrompt();
