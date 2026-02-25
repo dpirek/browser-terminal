@@ -2,10 +2,10 @@
   "name": "browser-terminal",
   "version": "1.0.0",
   "description": "",
-  "main": "app/server.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node app/server.js",
-    "dev": "nodemon app/server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "keywords": [],
   "author": "",
